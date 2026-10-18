@@ -1,0 +1,35 @@
+# STM32CubeIDE generated build directories
+/Debug/
+/Release/
+/build/
+
+# Eclipse/CubeIDE local workspace state
+.metadata/
+.recommenders/
+
+# Compiler and linker outputs
+*.o
+*.d
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+*.su
+*.cyclo
+
+# Editor backups and operating-system files
+*.bak
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Python test/tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Keep .ioc, .project, .cproject, .settings/, source, drivers,
+# linker scripts and tests in version control.
