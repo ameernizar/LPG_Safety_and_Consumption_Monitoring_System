@@ -1,6 +1,7 @@
 #ifndef OLED_UI_H
 #define OLED_UI_H
 #include "sh1106.h"
+#include "hx711.h"
 #include "ds3231.h"
 #include "mq6_monitor.h"
 #include "safety_state.h"
@@ -10,6 +11,7 @@ typedef struct {
     uint8_t temperature_status; /* Existing DS codes: 0 OK, 1..6 error, 7 pending. */
     uint8_t flame_high, crc_calculated, crc_received, conversion_busy, conversion_done;
     const MQ6_Monitor *mq6;
+    const HX711 *hx711;
     uint8_t adc_status; /* Existing acquisition codes: pending, OK, init/cal/read error. */
     uint32_t pin_mv, ao_mv;
     DS3231_Status rtc_status, rtc_set_status;

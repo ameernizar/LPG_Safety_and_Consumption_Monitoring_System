@@ -22,27 +22,33 @@ int main(void)
     MQ6_Monitor m={.raw=1234,.filtered=1200,.baseline=1150,.deviation=50,
                   .raw_valid=1,.valid=1,.baseline_valid=1,.status=MQ6_MON_MONITORING};
     DS3231_Reading rtc={.time={2026,10,18,7,9,43,12},.status_valid=1};
+    HX711 h={.state=HX711_READY,.valid=1,.raw=-8388607,.range=16777214,.count=16};
     OLED_UI_Data d={.temperature_tenths=265,.temperature_status=0,.flame_high=1,
-        .mq6=&m,.adc_status=1,.pin_mv=1000,.ao_mv=2000,.rtc_status=DS3231_OK,
+        .hx711=&h,.mq6=&m,.adc_status=1,.pin_mv=1000,.ao_mv=2000,.rtc_status=DS3231_OK,
         .rtc=&rtc,.mode=SAFETY_MODE_DEMO,.state=SAFETY_SENSOR_FAULT};
     OLED_UI ui={0};
     unsigned before=transfers;
-    for(unsigned page=0;page<4;++page) {
+    for(unsigned page=0;page<5;++page) {
         assert(OLED_UI_Render(&ui,&d,page*5000)==HAL_OK); assert(ui.page==page); Save(page);
     }
-    assert(transfers-before==4*32); /* One update per frame, not blank + redraw. */
-    assert(OLED_UI_Render(&ui,&d,19999)==HAL_OK && ui.page==3);
-    assert(OLED_UI_Render(&ui,&d,20000)==HAL_OK && ui.page==0);
+    assert(transfers-before==5*32); /* One update per frame, not blank + redraw. */
+    assert(OLED_UI_Render(&ui,&d,24999)==HAL_OK && ui.page==4);
+    assert(OLED_UI_Render(&ui,&d,25000)==HAL_OK && ui.page==0);
     ui=(OLED_UI){0}; OLED_UI_Render(&ui,&d,UINT32_MAX-2000);
     OLED_UI_Render(&ui,&d,2999); assert(ui.page==1);
     for(unsigned error=1;error<=7;++error) {
+        h.state=HX711_ERROR; h.valid=0; h.error=(HX711_Error)(error%5);
         d.temperature_status=error; d.rtc_set_state=4; d.rtc_set_error=error;
         rtc.osf=1; m.valid=0; m.raw_valid=0; m.baseline_valid=0;
-        for(unsigned page=0;page<4;++page) {
+        for(unsigned page=0;page<5;++page) {
             ui=(OLED_UI){.initialized=1,.page=page};
             assert(OLED_UI_Render(&ui,&d,0)==HAL_OK);
         }
     }
+    m.status=MQ6_MON_STABILIZING; d.adc_status=1;
+    ui=(OLED_UI){.initialized=1,.page=1};
+    assert(OLED_UI_Render(&ui,&d,0)==HAL_OK && ui.page==1);
+    assert(strcmp(MQ6_MonitorLabel(m.status),"STABILIZING")==0);
     uint8_t copy[1024]; memcpy(copy,SH1106_Buffer,1024);
     SH1106_Pixel(65535,65535,1); SH1106_InvertRect(128,64,65535,65535);
     assert(memcmp(copy,SH1106_Buffer,1024)==0);

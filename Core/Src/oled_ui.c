@@ -39,15 +39,15 @@ HAL_StatusTypeDef OLED_UI_Render(OLED_UI *ui, const OLED_UI_Data *d, uint32_t no
     if (!ui || !d || !d->mq6 || !d->rtc) return HAL_ERROR;
     if (!ui->initialized) { ui->initialized=1; ui->page_tick=now; ui->page=0; }
     uint32_t steps = (uint32_t)(now-ui->page_tick)/5000U;
-    ui->page = (uint8_t)((ui->page + steps)%4U);
+    ui->page = (uint8_t)((ui->page + steps)%5U);
     ui->page_tick += steps*5000U;
-    static const char *titles[] = {"LPG MONITOR","MQ6 GAS MONITOR","SENSORS","SYSTEM"};
+    static const char *titles[] = {"LPG MONITOR","MQ6 GAS MONITOR","SENSORS","SYSTEM","HX711 RAW"};
     char text[32];
     const MQ6_Monitor *m = d->mq6;
     SH1106_Clear(); /* RAM only; never send a blank frame. */
     Text(1,titles[ui->page]);
     SH1106_SetCursor(104,1);
-    snprintf(text,sizeof(text),"%u/4",(unsigned)ui->page+1U);
+    snprintf(text,sizeof(text),"%u/5",(unsigned)ui->page+1U);
     SH1106_WriteString(text);
     SH1106_InvertRect(0,0,128,9);
     switch (ui->page)
@@ -105,7 +105,7 @@ HAL_StatusTypeDef OLED_UI_Render(OLED_UI *ui, const OLED_UI_Data *d, uint32_t no
         } else Text(48,"MQ6 VOLTS: INVALID");
         Text(56,"RAW DO / EST VOLTS");
         break;
-    default:
+    case 3:
         Text(12,RTCLabel(d));
         Text(21,"SD: NOT INSTALLED");
         Text(30,"LOAD CELL: PENDING");
@@ -128,12 +128,35 @@ HAL_StatusTypeDef OLED_UI_Render(OLED_UI *ui, const OLED_UI_Data *d, uint32_t no
             Text(56,reason);
         } else Text(56,"IST UTC+05:30");
         break;
+    case 4: {
+        const HX711 *h = d->hx711;
+        Text(12,!h || h->state==HX711_WAITING ? "HX711: WAITING" :
+                h->state==HX711_READY ? "HX711: READY":"HX711: ERROR");
+        if (h && h->valid) snprintf(text,sizeof(text),"RAW: %ld",(long)h->raw);
+        else snprintf(text,sizeof(text),"RAW: --------");
+        Text(21,text);
+        if (h && h->valid) snprintf(text,sizeof(text),"RANGE: %lu",(unsigned long)h->range);
+        else snprintf(text,sizeof(text),"RANGE: ----");
+        Text(30,text);
+        Text(39,!h || !h->valid || h->count<HX711_WINDOW ? "STABILITY: WAIT" :
+                h->stable ? "STABILITY: STABLE":"STABILITY: CHANGING");
+        const char *detail="CHANNEL A GAIN 128";
+        if (h) switch(h->error) {
+        case HX711_NO_DATA: detail="NO DATA / CHECK DT"; break;
+        case HX711_PROTOCOL: detail="DT STUCK LOW"; break;
+        case HX711_SATURATED: detail="ADC SATURATED"; break;
+        case HX711_TIMING: detail="TIMING ERROR"; break;
+        default: break;
+        }
+        Text(48,detail); Text(56,"RAW COUNTS ONLY");
+        break;
     }
-    /* Page indicator: active 3x3 square, inactive center dots.
-     x=110..124, y=59..61; clear of footer text and framebuffer edges. */
-    for (unsigned i=0;i<4;++i)
-        for(unsigned x=0;x<3;++x)
+    }
+    /* Page indicator: active 2x3 marker, inactive center dots.
+     x=110..123, y=59..61; clear of footer text and framebuffer edges. */
+    for (unsigned i=0;i<5;++i)
+        for(unsigned x=0;x<2;++x)
             for(unsigned y=0;y<3;++y)
-                if (i==ui->page || (x==1 && y==1)) SH1106_Pixel(110+i*4+x,59+y,1);
+                if (i==ui->page || (x==1 && y==1)) SH1106_Pixel(110+i*3+x,59+y,1);
     return SH1106_UpdateScreen();
 }

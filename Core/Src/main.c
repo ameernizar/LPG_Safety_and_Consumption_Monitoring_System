@@ -79,6 +79,7 @@ static uint8_t mq6_calibrated;
 static uint8_t mq6_batch_saturated;
 static MQ6_Monitor mq6_monitor;
 static OLED_UI oled_ui;
+static HX711 hx711;
 static DS3231_Reading rtc_reading;
 static DS3231_Status rtc_status = DS3231_WAIT;
 /* SWD RAM mailbox: all fields are 32-bit words, deliberately zero at boot.
@@ -368,6 +369,7 @@ static void Safety_Service(void)
 
 static void Heartbeat_Service(void)
 {
+  HX711_Service(&hx711, HAL_GetTick());
   Safety_Service();
   uint32_t now = HAL_GetTick();
   if ((uint32_t)(now - heartbeat_tick) >= 500U)
@@ -604,7 +606,7 @@ static void OLED_ShowTemperature(DS18B20_Status status, int16_t tenths)
     .flame_high = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1) == GPIO_PIN_SET,
     .crc_calculated = scratchpad_crc_calculated, .crc_received = scratchpad_crc_received,
     .conversion_busy = conversion_busy_seen, .conversion_done = conversion_done,
-    .mq6 = &mq6_monitor, .adc_status = mq6_status,
+    .hx711 = &hx711, .mq6 = &mq6_monitor, .adc_status = mq6_status,
     .pin_mv = mq6_pin_mv, .ao_mv = mq6_ao_mv,
     .rtc_status = rtc_status, .rtc_set_status = rtc_set_status, .rtc = &rtc_reading,
     .rtc_set_state = rtc_set_request.state, .rtc_set_error = rtc_set_request.error,
@@ -658,6 +660,7 @@ int main(void)
   MQ6_Init(); /* Calibrate once; report failures on OLED. */
   MQ6_MonitorInit(&mq6_monitor, HAL_GetTick());
   onewire_ready = (OneWire_Init() == HAL_OK);
+  HX711_Init(&hx711, HAL_GetTick());
   heartbeat_tick = HAL_GetTick();
   SafetyState_Init(&safety_machine, heartbeat_tick); /* DEMO by default. */
   safety_led_output = 0;
@@ -820,7 +823,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* PA1: flame module digital output; raw level, no assumed polarity.
-     PA0 remains 1-Wire; PB8/PB9 remain reserved for the future HX711. */
+     PA0 remains 1-Wire; PB8/PB9 are initialized separately by HX711_Init(). */
   GPIO_InitStruct.Pin = GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;

@@ -28,57 +28,96 @@ Future live assessment needs a separate validated input adapter and policy,
 including calibrated thresholds, polarity, hysteresis and fault precedence.
 SafetyState_Update's transition result provides a hook for future event logging.
 
-# Phase 10 MQ-6 monitoring
+# Phase 10 MQ-6 baseline qualification (stability revision)
 
 ```sh
 cc -std=c11 -Wall -Wextra -Werror -fsanitize=undefined -ICore/Inc Core/Src/mq6_monitor.c tests/mq6_monitor_test.c -o /tmp/mq6_monitor_test
 /tmp/mq6_monitor_test
 ```
 
-Tests cover startup, settling boundary, baseline averaging, positive/negative
-EMA response, fixed baseline, error recovery, ADC rails (including a rail inside
-a batch), invalid ranges, interrupted baseline collection and tick rollover.
+RAW remains the average of 16 ADC conversions acquired about once per second.
+The Q8 EMA retains alpha 1/8. ADC initialization, pin assignments and timing-critical
+DS18B20 code are unchanged. DEMO remains independent of all gas-monitor results.
 
-Configuration is in Core/Inc/mq6_monitor.h. Defaults: 60000 ms software settling,
-32 valid batches for baseline, EMA alpha 1/8 (Q8 fixed point, seeded from first
-valid batch). RAW means the existing average of 16 ADC conversions, acquired
-about once per second; FILTER adds temporal smoothing. Baseline averages RAW
-batches only after settling, then remains fixed until reset. DELTA is FILTER
-minus BASE, in ADC counts. Collection takes about another 32 seconds. No new
-wait loops or delays are added; the existing sensor acquisition schedule stays.
+Configuration in Core/Inc/mq6_monitor.h:
 
-WARMUP is only a software settling interval. It does not establish that the
-MQ-6 heater is ready, replace manufacturer preheating/conditioning requirements,
-certify clean air, or calibrate gas concentration. Choose a suitable interval
-for the actual module and experimental conditions before interpreting trends.
-A baseline taken in contaminated air is still just that ambient baseline.
+| Parameter | Default | Purpose |
+| --- | --- | --- |
+| MQ6_SETTLING_MS | 60000 ms | Minimum elapsed period from initialization/known power restart |
+| MQ6_STABILITY_SAMPLES | 16 | Even-sized rolling window of raw batches |
+| MQ6_STABILITY_SPAN_MS | 15000 ms | Minimum oldest-to-newest window duration |
+| MQ6_MAX_SAMPLE_GAP_MS | 2500 ms | Maximum permitted gap during qualification/capture |
+| MQ6_STABILITY_RANGE | 12 counts | Maximum rolling max-minus-min |
+| MQ6_STABILITY_DRIFT | 4 counts | Maximum absolute difference of rolling half-window means |
+| MQ6_BASELINE_SAMPLES | 32 | Even-sized baseline capture following qualification |
+| MQ6_CAPTURE_RANGE | 12 counts | Maximum max-minus-min over ALL captured batches |
+| MQ6_CAPTURE_DRIFT | 4 counts | Maximum first-half vs second-half mean difference over ALL capture batches |
+| MQ6_EMA_SHIFT | 3 | EMA alpha 1/8 |
 
-Any failed ADC operation or out-of-range count invalidates that update. Any
-individual conversion at 0/4095 flags SAT LOW/HIGH (LOW takes precedence if
-both occur). These are rail observations, not proof of a broken sensor.
-Invalid batches never enter the filter/baseline. Before a completed baseline,
-a failure restarts settling and collection. After completion the baseline is
-retained; invalid FILTER/DELTA display dashes and recovery re-seeds the filter.
-Rail checks cannot detect all disconnected sensors, heater failures, saturation
-at module supply limits, or plausible but incorrect voltages.
+These are experimental noise/drift criteria, not calibrated gas thresholds. A
+short stable interval does not establish heater readiness, manufacturer
+preconditioning, clean air, reliable detection or gas concentration. Use actual
+module guidance and measured ambient behavior to tune them. Constant but incorrect
+voltages can pass stability checks. ADC saturation checks cannot detect all faults.
 
-OLED lower rows alternate every 5 seconds between RAW/FILTER/BASE/DELTA/status
-and the existing voltage estimates plus DS18B20 diagnostics. DEMO state, live
-temperature and raw flame DO stay on both pages. Existing ASCII font supports
-all labels and signed numbers. The baseline monitor has no safety-state input
-path; DEMO still cycles every 5 seconds independent of acquisition faults.
+State sequence: WARMUP -> STABILIZING -> BASELINE -> MONITORING. Warm-up samples
+are excluded from qualification. After the minimum timer, collect 16 recent valid
+batches spanning at least 15 seconds; both range and drift must pass. The NEXT
+32 batches form the baseline; the qualification window itself is not averaged
+into it. Rolling stability is checked throughout capture. Capture-wide range
+is checked as samples arrive; capture-wide drift is checked before acceptance.
+If either fails, discard the candidate and requalify. No timeout can accept an
+unstable baseline. With 1 Hz sampling and default parameters, acceptance occurs
+about 107–109 seconds from initialization; timing/invalid data can extend this
+indefinitely. Baseline is the rounded mean of the 32 raw batch averages (512
+underlying conversions), then stays fixed. Signed DELTA is FILTER minus BASE.
 
-Physical test: program Debug/STM32_HW_Test.elf with CubeProgrammer and reset.
-Observe WARMUP, then BASELINE progress, then MONITORING (roughly 92 seconds
-with defaults and no errors). RAW should vary faster than FILTER; BASE stays
-fixed and DELTA equals FILTER minus BASE. Check temperature, flame DO, PC13
-heartbeat and all four DEMO LED states continue. Reset should discard BASE and
-restart WARMUP. Observe ordinary ambient drift; do not release LPG for this
-software check. Optional rail test: with power removed, disconnect MQ-6 AO
-from R1 and ground the divider midpoint/PA2; power up and expect SAT LOW with
-FILTER/DELTA unavailable. Power off before restoring the original wiring.
-Never connect the 5 V AO directly to PA2. Acquisition-error and high-rail paths
-are covered by host tests; hardware sensing remains unverified by this build.
+Half-mean differences are compared using integer sums: abs(sum_first-sum_second)
+<= half_count * limit. There is no rounded-mean threshold ambiguity. Samples
+are 0..4095, capture length is even and <=1024, window length even and <=64;
+32-bit sums safely bound the arithmetic. Duplicate timestamps are ignored;
+uint32_t subtraction handles tick wrap. Call at least once per full tick wrap.
+
+An invalid reading/rail observation shows its existing ACQ ERROR/SAT status,
+hides FILTER/DELTA and clears qualification/capture. On the next valid sample,
+resume STABILIZING if the original minimum warm-up time has elapsed; otherwise
+finish the original WARMUP. The warm-up start time is not restarted by such
+errors. Excessive sample gaps also discard qualification but retain this timer;
+the returning valid sample can seed a fresh window. EMA reseeds after errors or
+long gaps. After acceptance, faults preserve the fixed baseline, with invalid
+delta hidden. There is no automatic recalibration.
+
+Manual API (not connected to any button, RAM trigger or main-loop caller):
+
+```c
+MQ6_MonitorRequestBaseline(&monitor, HAL_GetTick());
+```
+
+This explicitly invalidates the old baseline/delta, clears qualification and
+starts a new stability/capture workflow while retaining live EMA. It preserves
+the original minimum-warm-up deadline: an already warmed monitor goes directly
+to STABILIZING; an unfinished warm-up completes its remaining time. Use
+MQ6_MonitorInit() instead on genuine initialization or a KNOWN heater power
+interruption to restart the full minimum period. Firmware cannot infer heater
+power loss from ordinary ADC samples. Baselines remain RAM-only and reset on
+MCU restart. Repeated manual requests cancel partial collection, never accept it.
+
+The existing MQ6 OLED page gains STABILIZING without changing its layout, font,
+page scheduling or other pages. BASE progress remains n/32; BASE/DELTA are dashes
+until accepted. Footer remains EXPERIMENTAL ONLY. No ppm or automatic alarm is
+introduced; negative delta (including 380-454=-74) remains valid arithmetic.
+
+Tests cover warm-up boundaries, duration qualification, duplicate timestamps,
+rolling/capture range and drift equality/rejection, slow drift that passes the
+rolling window but fails full capture, rounded baseline mean, invalid samples,
+rails, gaps, persistent instability, manual recapture, fixed baseline recovery,
+negative delta, count limits and tick rollover. No device flashing is performed.
+
+Hardware validation is pending explicit user approval. Once approved, observe
+WARMUP/STABILIZING/BASELINE/MONITORING and verify that unstable signals do not
+produce a baseline; check raw vs filtered readings, delta, RTC/sensor pages and
+DEMO LEDs. Do not intentionally release LPG for this software check. The API
+has no physical trigger in this revision.
 
 # Phase 11 RTC explicit setting and diagnostics
 

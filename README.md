@@ -87,9 +87,11 @@ calibration. Each raw update averages 16 conversions. The monitor then applies
 an EMA with default weight 1/8. Configuration lives in `Core/Inc/mq6_monitor.h`:
 
 - Software settling interval: 60 seconds.
-- Baseline collection: 32 valid updates after settling.
+- Stability qualification: 16 batches spanning at least 15 seconds, with configurable range/drift limits.
+- Baseline collection: 32 valid updates after qualification, with range/drift checks across the whole capture.
 - Baseline remains fixed until reset; delta is filtered ADC minus baseline.
-- Invalid acquisition or ADC-rail samples are excluded from processing.
+- Invalid acquisition or ADC-rail samples clear qualification without restarting the minimum warm-up timer.
+- Manual baseline recapture is an API only; no physical or automatic trigger is assigned.
 
 This software baseline does not replace manufacturer conditioning/preheating or
 gas calibration. Rail checks cannot detect every disconnection or sensor fault.
