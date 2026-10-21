@@ -225,3 +225,9 @@ Next stages are physical HX711 validation, construction of the weighing platform
 then a separately approved calibration workflow. Storage, consumption estimates,
 buttons and actuator drivers remain future work; none is implied by the current
 raw diagnostics.
+
+## License
+
+Original project contributions are licensed under the [MIT License](LICENSE).
+Third-party code, including STM32 HAL, CMSIS and generated files with existing
+license notices, retains its respective licenses and copyright notices.
