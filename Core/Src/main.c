@@ -80,6 +80,8 @@ static uint8_t mq6_batch_saturated;
 static MQ6_Monitor mq6_monitor;
 static OLED_UI oled_ui;
 static HX711 hx711;
+static FlameFilter flame_filter;
+static uint32_t temperature_sample_tick;
 static DS3231_Reading rtc_reading;
 static DS3231_Status rtc_status = DS3231_WAIT;
 /* SWD RAM mailbox: all fields are 32-bit words, deliberately zero at boot.
@@ -369,6 +371,8 @@ static void Safety_Service(void)
 
 static void Heartbeat_Service(void)
 {
+  FlameFilter_Update(&flame_filter,
+      HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1) == GPIO_PIN_SET, HAL_GetTick());
   HX711_Service(&hx711, HAL_GetTick());
   Safety_Service();
   uint32_t now = HAL_GetTick();
@@ -603,7 +607,9 @@ static void OLED_ShowTemperature(DS18B20_Status status, int16_t tenths)
 {
   const OLED_UI_Data view = {
     .temperature_tenths = tenths, .temperature_status = status,
-    .flame_high = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1) == GPIO_PIN_SET,
+    .temperature_sample_tick = temperature_sample_tick,
+    .flame_high = flame_filter.high,
+    .flame_valid = FlameFilter_Valid(&flame_filter, HAL_GetTick()),
     .crc_calculated = scratchpad_crc_calculated, .crc_received = scratchpad_crc_received,
     .conversion_busy = conversion_busy_seen, .conversion_done = conversion_done,
     .hx711 = &hx711, .mq6 = &mq6_monitor, .adc_status = mq6_status,
@@ -690,6 +696,7 @@ int main(void)
     uint32_t cycle_start = HAL_GetTick();
     int16_t temperature_tenths = 0;
     DS18B20_Status status = DS18B20_ReadTemperature(&temperature_tenths);
+    if (status == DS_OK) temperature_sample_tick = HAL_GetTick();
     Heartbeat_Service();
     MQ6_Sample(); /* After 1-Wire activity, with interrupts enabled. */
     MQ6_MonitorUpdate(&mq6_monitor, HAL_GetTick(), mq6_status == MQ6_OK,

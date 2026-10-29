@@ -42,11 +42,11 @@ void HX711_Service(HX711 *h, uint32_t now)
 {
     if (h->error == HX711_TIMING || (uint32_t)(now-h->poll_tick) < 1U) return;
     h->poll_tick = now;
-    if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8) == GPIO_PIN_SET) {
-        if ((uint32_t)(now-h->last_tick) >= HX711_TIMEOUT_MS)
-            Fail(h, HX711_NO_DATA, now);
-        return;
-    }
+    /* A ready LOW may be a conversion buffered throughout a service gap.
+     * Expire old data/window before considering DOUT; recovery discards it. */
+    if ((uint32_t)(now-h->last_tick) >= HX711_TIMEOUT_MS)
+        Fail(h, HX711_NO_DATA, now);
+    if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8) == GPIO_PIN_SET) return;
     uint32_t bits = 0;
     if (!DelayUs(h)) { Fail(h,HX711_TIMING,now); return; }
     for (unsigned i = 0; i < 25U; ++i) {

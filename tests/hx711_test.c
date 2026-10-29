@@ -60,6 +60,14 @@ int main(void) {
     Init(&h,0); ready=1; stop_on_high=1; HX711_Service(&h,1);
     assert(h.error==HX711_TIMING && !high && !irq && pulses==1);
     Init(&h,0); ready=1; irq=1; HX711_Service(&h,1); assert(irq==1 && !high && pulses==25);
+    Init(&h,0); Frame(&h,1,100); Frame(&h,501,100);
+    assert(HX711_Fresh(&h,1500)); assert(!HX711_Fresh(&h,1501));
+    Frame(&h,1501,200); /* DOUT already LOW after missed servicing */
+    assert(!h.valid && !h.count && h.state==HX711_WAITING);
+    Frame(&h,2000,300); assert(!h.valid);
+    Frame(&h,2001,400); assert(h.valid && h.raw==400 && h.count==1);
+    Frame(&h,2101,0x800000); assert(!HX711_Fresh(&h,2101));
+    assert(!HX711_Fresh(0,0));
     stopped=1; HX711_Init(&h,0); assert(h.error==HX711_TIMING);
     stopped=0; freq=36000000; HX711_Init(&h,0); assert(h.error==HX711_TIMING);
     printf("HX711 protocol, signed data, settling, timeout, recovery, stability, rollover and timing faults passed; context=%zu bytes\n",sizeof(h));

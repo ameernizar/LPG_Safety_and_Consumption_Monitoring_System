@@ -22,4 +22,10 @@ void HX711_Init(HX711 *h, uint32_t now);
 /* Call from foreground/background waits, never inside a 1-Wire time slot.
  * Returns immediately if not ready. One bounded frame maximum per call. */
 void HX711_Service(HX711 *h, uint32_t now);
+/* Rendering must not trust a cached valid flag after service pauses. */
+static inline uint8_t HX711_Fresh(const HX711 *h, uint32_t now)
+{
+    return h && h->valid && h->state == HX711_READY &&
+           (uint32_t)(now-h->last_tick) < HX711_TIMEOUT_MS;
+}
 #endif

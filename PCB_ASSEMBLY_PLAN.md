@@ -1,5 +1,11 @@
 # Permanent perfboard planning package
 
+**MCU identity correction (29 October 2026):** owner-confirmed marking is
+HK STM32F103C8T6; CubeIDE target STM32F103C8Tx, LQFP48, nominal 64 KB Flash and
+20 KB SRAM. HK denotes compatible hardware, not verified genuine ST silicon.
+Actual characteristics require verification; do not assume extra Flash.
+This identity correction does not change the physical footprint or pin plan.
+
 **Project:** LPG Safety and Consumption Monitoring System  
 **Audit date:** 18 October 2026  
 **Target:** DEVAAJ D-131 universal dot perfboard, approximately 100 × 150 mm; removable HW-267 board  
@@ -23,7 +29,7 @@ AVAILABLE means unused by the inspected application, subject to board-level chec
 
 | Evidence | Finding |
 | --- | --- |
-| `STM32_HW_Test.ioc` | LQFP48 STM32F103CBTx profile; PB6/PB7 I2C1, PA13/PA14 SWD, PC13 output, PD0/PD1 HSE |
+| `STM32_HW_Test.ioc` | LQFP48 STM32F103C8Tx profile; PB6/PB7 I2C1, PA13/PA14 SWD, PC13 output, PD0/PD1 HSE |
 | `Core/Src/main.c:134` — `OneWire_Init()` | PA0 output open-drain, no internal pull; released HIGH; DWT timing |
 | `Core/Src/main.c:346` — LED service | PA3/PA4/PA5 active-high DEMO outputs |
 | `Core/Src/main.c:443` — `MQ6_Init()` | PA2 analog, ADC1 channel 2, ADC clock PCLK2/6 = 12 MHz, 239.5-cycle sampling, calibration |
@@ -50,7 +56,7 @@ changes are authorized by this planning document.
 
 ## 2. Master GPIO allocation
 
-The actual chip is HK K32F103CBT6-compatible, not assumed genuine STM32. Names
+The actual chip is HK-marked STM32F103C8T6, not assumed genuine STM32. Names
 below are MCU/board signal labels, **not socket pin numbers**. Do not infer header
 orientation from this table. Identify each socket position from the actual board.
 
@@ -424,7 +430,7 @@ has not independently measured the board or inspected those photographs.
 | Hole pitch | Apparently 2.54 mm | Confirm using a real header test fit |
 | Grid | Approximately 39–40 columns and 58–60 rows | Exact usable counts remain unverified |
 | Copper | Individual solder pads plus elongated edge pads | Edge-pad interconnections must be checked; not assumed to be power rails |
-| MCU board | HW-267 Blue-Pill-style board with HK K32F103CBT6 | Existing working module; STM32F103CBTx compatibility profile |
+| MCU board | HW-267 Blue-Pill-style board with HK-marked STM32F103C8T6 | Existing working module; STM32F103C8Tx compatibility profile |
 | MCU board dimensions | Approximately 53 mm long × 23 mm wide | User-supplied ruler/photo estimate; verify clearance during test fit |
 | Header count | 20 pins on each side, 40 total | User-confirmed count |
 | Header pitch | Nominal 2.54 mm | Confirm socket/perfboard fit |

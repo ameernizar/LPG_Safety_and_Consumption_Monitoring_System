@@ -1,7 +1,7 @@
 # LPG Safety and Consumption Monitoring System
 
 An experimental embedded student project built around an **HW-267 Blue-Pill-style
-board with an HK K32F103CBT6-compatible MCU**. It displays live temperature, raw
+board with an HK-marked STM32F103C8T6 MCU**. It displays live temperature, raw
 flame-sensor output, experimental MQ-6 gas-sensor measurements and IST date/time.
 A separate DEMO state machine exercises warning LEDs. An HX711 interface now
 provides raw load-cell diagnostics in preparation for future weight measurement.
@@ -30,9 +30,12 @@ requires explicit approval. A successful build does not establish sensor accurac
 
 ## Hardware and pin assignments
 
-The CubeMX compatibility profile is **STM32F103CBTx**, with a verified **72 MHz**
+The CubeMX compatibility profile is **STM32F103C8Tx**, with a verified **72 MHz**
 system clock. This profile does not imply that the installed MCU is a genuine ST
-part. Programming uses ST-LINK and STM32CubeProgrammer.
+part. Nominal memory is **64 KB Flash (0x10000)** and **20 KB SRAM (0x5000)**,
+with an LQFP48 package. The HK-marked device is treated as compatible hardware;
+its actual characteristics still require verification. No extra clone Flash is
+assumed. Programming uses ST-LINK/V2 over SWD and STM32CubeProgrammer.
 
 | Component | MCU connection | Configuration / wiring |
 | --- | --- | --- |
@@ -187,7 +190,9 @@ Preserve USER CODE and review changes. Generating build files is distinct from
 regenerating CubeMX application code.
 
 The last recorded HX711 Debug build used **32,472 bytes Flash** (`text + data`)
-and **3,552 bytes static RAM** (`data + bss`, excluding runtime stack/heap).
+and **3,552 bytes link-reserved RAM** (including the 1,536-byte minimum
+heap/stack reservation; application data + BSS is 2,016 bytes). Actual runtime
+stack/heap use is not established by these figures.
 Commands and coverage are documented in [tests/README.md](tests/README.md) and
 [HX711_DIAGNOSTIC.md](HX711_DIAGNOSTIC.md). Tests cover MQ-6 qualification, DEMO
 transitions, RTC validation/setting, five-page rendering/bounds and HX711 protocol,
@@ -231,3 +236,25 @@ raw diagnostics.
 Original project contributions are licensed under the [MIT License](LICENSE).
 Third-party code, including STM32 HAL, CMSIS and generated files with existing
 license notices, retains its respective licenses and copyright notices.
+
+## MCU configuration correction — 29 October 2026
+
+The owner physically rechecked the chip marking as **HK STM32F103C8T6**. Earlier
+CBTx identification and 128 KB assumptions are historical. Debug and Release now
+select STM32F103C8Tx and `STM32F103C8TX_FLASH.ld` (64 KB Flash, 20 KB SRAM).
+The shared `STM32F103xB` CMSIS macro/header and existing startup vector table
+remain correct for C8; the startup filename retains its historical `cbtx` suffix.
+See [MCU_CONFIGURATION_UPDATE.md](MCU_CONFIGURATION_UPDATE.md) for validation
+and existing CubeMX regeneration risks. Application code and GPIOs are unchanged.
+
+## Sensor reliability update
+
+The current breadboard has OLED, temperature, MQ-6, flame DO, HX711/load cell and
+status LEDs. RTC hardware, MicroSD, buzzer and the weighing platform are postponed;
+existing RTC software is retained unchanged.
+
+The five-page UI now distinguishes temperature/HX711 freshness, reports MQ-6 ADC
+validity separately from baseline progress, and shows qualified raw flame HIGH/LOW
+(or WAIT). HX711 requalifies after long service gaps. No live alarms or calibration
+were added. See [SENSOR_RELIABILITY.md](SENSOR_RELIABILITY.md) for the audit, all
+eight passing test suites, current Debug resource usage and pending physical tests.

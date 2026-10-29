@@ -1,3 +1,11 @@
+> **Historical record — superseded MCU identification (29 October 2026).**
+> The owner has physically confirmed **HK STM32F103C8T6**, using the
+> **STM32F103C8Tx** compatibility target: nominal **64 KB Flash**, **20 KB SRAM**.
+> Earlier K32/CB markings, CBTx configuration and 128 KB reports below are
+> preserved as historical observations, not current hardware specifications.
+> No genuine-ST or extra-Flash assumption is made. Test logs are unchanged.
+> See [MCU_CONFIGURATION_UPDATE.md](MCU_CONFIGURATION_UPDATE.md).
+
 # PROJECT_CONTEXT.md
 
 ## Project Title

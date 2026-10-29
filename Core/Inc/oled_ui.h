@@ -2,14 +2,16 @@
 #define OLED_UI_H
 #include "sh1106.h"
 #include "hx711.h"
+#include "sensor_health.h"
 #include "ds3231.h"
 #include "mq6_monitor.h"
 #include "safety_state.h"
 
 typedef struct {
     int16_t temperature_tenths;
+    uint32_t temperature_sample_tick;
     uint8_t temperature_status; /* Existing DS codes: 0 OK, 1..6 error, 7 pending. */
-    uint8_t flame_high, crc_calculated, crc_received, conversion_busy, conversion_done;
+    uint8_t flame_valid, flame_high, crc_calculated, crc_received, conversion_busy, conversion_done;
     const MQ6_Monitor *mq6;
     const HX711 *hx711;
     uint8_t adc_status; /* Existing acquisition codes: pending, OK, init/cal/read error. */

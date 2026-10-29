@@ -8,9 +8,15 @@ static void Text(uint8_t y, const char *text)
     SH1106_SetCursor(2, y);
     for (unsigned i = 0; i < 20U && text[i]; ++i) SH1106_WriteChar(text[i]);
 }
-static void Temp(const OLED_UI_Data *d, char text[32])
+static uint8_t TemperatureFresh(const OLED_UI_Data *d, uint32_t now)
+{
+    return SensorSampleFresh(d->temperature_status == 0,
+                            d->temperature_sample_tick, now, TEMPERATURE_MAX_AGE_MS);
+}
+static void Temp(const OLED_UI_Data *d, char text[32], uint32_t now)
 {
     if (d->temperature_status != 0) { snprintf(text,32,"TEMP: --.- C"); return; }
+    if (!TemperatureFresh(d,now)) { snprintf(text,32,"TEMP: STALE"); return; }
     int value = d->temperature_tenths;
     int magnitude = value < 0 ? -value : value;
     snprintf(text,32,"TEMP: %s%d.%d C",value < 0 ? "-":"",magnitude/10,magnitude%10);
@@ -60,22 +66,23 @@ HAL_StatusTypeDef OLED_UI_Render(OLED_UI *ui, const OLED_UI_Data *d, uint32_t no
             snprintf(text,sizeof(text),"%02u:%02u:%02u IST",t->hour,t->minute,t->second); Text(21,text);
         }
         else { Text(12,"TIME INVALID"); Text(21,RTCLabel(d)); }
-        Temp(d,text); Text(30,text);
+        Temp(d,text,now); Text(30,text);
         Text(39,d->mode == SAFETY_MODE_DEMO ? "MODE: DEMO":"MODE: LIVE DISABLED");
         Text(48,SafetyState_Label(d->state));
         Text(56,"SIMULATED STATE");
         break;
     case 1:
-        if (m->raw_valid) snprintf(text,sizeof(text),"RAW ADC: %u",m->raw);
-        else snprintf(text,sizeof(text),"RAW ADC: ----");
+        if (d->adc_status==1 && m->raw_valid)
+            snprintf(text,sizeof(text),"ADC %s: %u",m->valid ? "OK":"SAT",m->raw);
+        else snprintf(text,sizeof(text),d->adc_status==0 ? "ADC WAIT: ----":"ADC ERR: ----");
         Text(12,text);
-        if (m->valid) snprintf(text,sizeof(text),"FILTER: %u",m->filtered);
+        if (d->adc_status==1 && m->valid) snprintf(text,sizeof(text),"FILTER: %u",m->filtered);
         else snprintf(text,sizeof(text),"FILTER: ----");
         Text(21,text);
         if (m->baseline_valid) snprintf(text,sizeof(text),"BASE: %u",m->baseline);
-        else snprintf(text,sizeof(text),"BASE: -- %u/%u",m->baseline_count,(unsigned)MQ6_BASELINE_SAMPLES);
+        else snprintf(text,sizeof(text),"BASE WAIT: %u/%u",m->baseline_count,(unsigned)MQ6_BASELINE_SAMPLES);
         Text(30,text);
-        if (m->valid && m->baseline_valid) snprintf(text,sizeof(text),"DELTA: %+d",m->deviation);
+        if (d->adc_status==1 && m->valid && m->baseline_valid) snprintf(text,sizeof(text),"DELTA: %+d",m->deviation);
         else snprintf(text,sizeof(text),"DELTA: ----");
         Text(39,text);
         if (d->adc_status >= 2)
@@ -84,8 +91,8 @@ HAL_StatusTypeDef OLED_UI_Render(OLED_UI *ui, const OLED_UI_Data *d, uint32_t no
         Text(56,"EXPERIMENTAL ONLY");
         break;
     case 2:
-        Temp(d,text); Text(12,text);
-        if (d->temperature_status==0) Text(21,"DS18B20: OK");
+        Temp(d,text,now); Text(12,text);
+        if (d->temperature_status==0) Text(21,TemperatureFresh(d,now) ? "DS18B20: FRESH":"DS18B20: STALE");
         else if (d->temperature_status==7) Text(21,"DS18B20: WAIT");
         else {
             snprintf(text,sizeof(text),"DS ERROR E%u",d->temperature_status);
@@ -96,9 +103,10 @@ HAL_StatusTypeDef OLED_UI_Render(OLED_UI *ui, const OLED_UI_Data *d, uint32_t no
                          d->conversion_busy,d->conversion_done);
             Text(21,text);
         }
-        Text(30,d->flame_high ? "FLAME DO: HIGH":"FLAME DO: LOW");
+        Text(30,!d->flame_valid ? "FLAME DO: WAIT" :
+                d->flame_high ? "FLAME DO: HIGH":"FLAME DO: LOW");
         Text(39,"WEIGHT: PENDING");
-        if (d->adc_status==1) {
+        if (d->adc_status==1 && m->valid) {
             unsigned ao=(d->ao_mv+5)/10, pin=(d->pin_mv+5)/10;
             snprintf(text,sizeof(text),"AO:%u.%02u IN:%u.%02u V",ao/100,ao%100,pin/100,pin%100);
             Text(48,text);
@@ -130,15 +138,17 @@ HAL_StatusTypeDef OLED_UI_Render(OLED_UI *ui, const OLED_UI_Data *d, uint32_t no
         break;
     case 4: {
         const HX711 *h = d->hx711;
-        Text(12,!h || h->state==HX711_WAITING ? "HX711: WAITING" :
+        uint8_t fresh = HX711_Fresh(h,now);
+        Text(12,h && h->valid && !fresh ? "HX711: STALE" :
+                !h || h->state==HX711_WAITING ? "HX711: WAITING" :
                 h->state==HX711_READY ? "HX711: READY":"HX711: ERROR");
-        if (h && h->valid) snprintf(text,sizeof(text),"RAW: %ld",(long)h->raw);
+        if (fresh) snprintf(text,sizeof(text),"RAW: %ld",(long)h->raw);
         else snprintf(text,sizeof(text),"RAW: --------");
         Text(21,text);
-        if (h && h->valid) snprintf(text,sizeof(text),"RANGE: %lu",(unsigned long)h->range);
+        if (fresh) snprintf(text,sizeof(text),"RANGE: %lu",(unsigned long)h->range);
         else snprintf(text,sizeof(text),"RANGE: ----");
         Text(30,text);
-        Text(39,!h || !h->valid || h->count<HX711_WINDOW ? "STABILITY: WAIT" :
+        Text(39,!fresh || h->count<HX711_WINDOW ? "STABILITY: WAIT" :
                 h->stable ? "STABILITY: STABLE":"STABILITY: CHANGING");
         const char *detail="CHANNEL A GAIN 128";
         if (h) switch(h->error) {
